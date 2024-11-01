@@ -4,14 +4,15 @@ import {
   withSettingsGradle,
   withAppBuildGradle,
   withMainApplication,
-  ExportedConfigWithProps, withGradleProperties,
+  ExportedConfigWithProps,
+  withGradleProperties,
 } from "@expo/config-plugins";
 import { ExpoConfig } from "@expo/config-types";
 import filesys from "fs";
 import path from "path";
 import resolveFrom from "resolve-from";
 import { insertLinesHelper } from "./insertLinesHelper";
-import {PropertiesItem} from "@expo/config-plugins/build/android/Properties";
+import { PropertiesItem } from "@expo/config-plugins/build/android/Properties";
 
 const fs = filesys.promises;
 
@@ -19,17 +20,17 @@ type Options = {
   disableJsi?: boolean;
   databases?: string[];
   excludeSimArch?: boolean;
-}
+};
 
 /**
  * Version 50+
  *  */
-function setAndroidMainApplication(config: ExportedConfigWithProps) {
+function setAndroidMainApplication(config: ExpoConfig) {
   return withDangerousMod(config, [
     "android",
     async (config) => {
       // @ts-ignore
-      const extension = config.sdkVersion >= '50.0.0' ? 'kt' : 'java';
+      const extension = config.sdkVersion >= "50.0.0" ? "kt" : "java";
       const root = config.modRequest.platformProjectRoot;
       const filePath = `${root}/app/src/main/java/${config?.android?.package?.replace(
         /\./g,
@@ -53,7 +54,7 @@ function setAndroidMainApplication(config: ExportedConfigWithProps) {
 
 function settingGradle(gradleConfig: ExpoConfig): ExpoConfig {
   return withSettingsGradle(gradleConfig, (mod) => {
-    if (!mod.modResults.contents.includes(':watermelondb-jsi')) {
+    if (!mod.modResults.contents.includes(":watermelondb-jsi")) {
       mod.modResults.contents += `
           include ':watermelondb-jsi'
           project(':watermelondb-jsi').projectDir = new File([
@@ -68,13 +69,17 @@ function settingGradle(gradleConfig: ExpoConfig): ExpoConfig {
 
 function buildGradle(config: ExpoConfig): ExpoConfig {
   return withAppBuildGradle(config, (mod) => {
-    if (!mod.modResults.contents.includes("implementation project(':watermelondb-jsi')")) {
+    if (
+      !mod.modResults.contents.includes(
+        "implementation project(':watermelondb-jsi')"
+      )
+    ) {
       const newContents = mod.modResults.contents.replace(
-          'dependencies {',
-          `dependencies {
+        "dependencies {",
+        `dependencies {
           implementation project(':watermelondb-jsi')
           `
-      )
+      );
       mod.modResults.contents = newContents;
     }
 
@@ -87,45 +92,56 @@ const cocoaPods = (config: ExpoConfig): ExpoConfig => {
     "ios",
     async (config) => {
       const filePath = path.join(
-          config.modRequest.platformProjectRoot,
-          "Podfile"
+        config.modRequest.platformProjectRoot,
+        "Podfile"
       );
 
       const contents = await fs.readFile(filePath, "utf-8");
-      const newContents=contents.replace(
-          'post_install do |installer|',`
+      const newContents = contents.replace(
+        "post_install do |installer|",
+        `
           
     # WatermelonDB dependency
     pod 'simdjson', path: '../node_modules/@nozbe/simdjson', modular_headers: true          
     
     post_install do |installer|`
       );
-        await fs.writeFile(filePath, newContents);
-        return config;
+      await fs.writeFile(filePath, newContents);
+      return config;
     },
   ]) as ExpoConfig;
 };
 
 function mainApplication(config: ExpoConfig): ExpoConfig {
   return withMainApplication(config, (mod) => {
-    if (!mod.modResults.contents.includes("import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage")) {
-      mod.modResults['contents'] = mod.modResults.contents.replace('import android.app.Application', `
-import android.app.Application
-import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage;
-import com.facebook.react.bridge.JSIModulePackage;        
-`);
+    // Remove deprecated WatermelonDB JSI package import for SDK 51+ compatibility
+    if (
+      mod.modResults.contents.includes(
+        "import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage"
+      )
+    ) {
+      mod.modResults.contents = mod.modResults.contents.replace(
+        "import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage;",
+        ""
+      );
     }
 
-    if (!mod.modResults.contents.includes("override fun getJSIModulePackage(): JSIModulePackage")) {
-      const newContents2 = mod.modResults.contents.replace(
-        'override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED',
-        `
-        override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED
-        override fun getJSIModulePackage(): JSIModulePackage {
-        return WatermelonDBJSIPackage()
-        }`
+    // Remove getJSIModulePackage method if it exists, for SDK 51+ compatibility
+    mod.modResults.contents = mod.modResults.contents.replace(
+      /override fun getJSIModulePackage\(\): JSIModulePackage\s*\{[^}]*\}/s,
+      ""
+    );
+
+    // Ensure `import com.facebook.react.bridge.JSIModulePackage` is also removed if no longer needed
+    if (
+      mod.modResults.contents.includes(
+        "import com.facebook.react.bridge.JSIModulePackage"
       )
-      mod.modResults.contents = newContents2;
+    ) {
+      mod.modResults.contents = mod.modResults.contents.replace(
+        "import com.facebook.react.bridge.JSIModulePackage;",
+        ""
+      );
     }
 
     return mod;
@@ -133,19 +149,28 @@ import com.facebook.react.bridge.JSIModulePackage;
 }
 
 function proGuardRules(config: ExpoConfig): ExpoConfig {
-  return withDangerousMod(config, ['android', async (config) => {
-    const contents = await fs.readFile(`${config.modRequest.platformProjectRoot}/app/proguard-rules.pro`, 'utf-8');
-    if (!contents.includes("-keep class com.nozbe.watermelondb.** { *; }")) {
-      const newContents = `
+  return withDangerousMod(config, [
+    "android",
+    async (config) => {
+      const contents = await fs.readFile(
+        `${config.modRequest.platformProjectRoot}/app/proguard-rules.pro`,
+        "utf-8"
+      );
+      if (!contents.includes("-keep class com.nozbe.watermelondb.** { *; }")) {
+        const newContents = `
       ${contents}
       -keep class com.nozbe.watermelondb.** { *; }
-      `
+      `;
 
-      await fs.writeFile(`${config.modRequest.platformProjectRoot}/app/proguard-rules.pro`, newContents);
-    }
+        await fs.writeFile(
+          `${config.modRequest.platformProjectRoot}/app/proguard-rules.pro`,
+          newContents
+        );
+      }
 
-    return config;
-  }]) as ExpoConfig;
+      return config;
+    },
+  ]) as ExpoConfig;
 }
 
 /**
@@ -275,7 +300,6 @@ const withCocoaPods = (config: ExpoConfig): ExpoConfig => {
  */
 // @ts-ignore
 function setExcludedArchitectures(project) {
-
   const configurations = project.pbxXCBuildConfigurationSection();
   // @ts-ignore
   for (const { buildSettings } of Object.values(configurations || {})) {
@@ -293,7 +317,7 @@ function setExcludedArchitectures(project) {
   return project;
 }
 
-const withExcludedSimulatorArchitectures = (c: ExpoConfig) : ExpoConfig=> {
+const withExcludedSimulatorArchitectures = (c: ExpoConfig): ExpoConfig => {
   return withXcodeProject(c, (config) => {
     config.modResults = setExcludedArchitectures(config.modResults);
     return config;
@@ -324,16 +348,16 @@ function getPlatformProjectFilePath(
 const withWatermelonDBAndroidJSI = (config: ExpoConfig, options: Options) => {
   if (options?.disableJsi === true) {
     return config;
-  };
+  }
 
   function buildGradle(gradleConfig: ExpoConfig): ExpoConfig {
     return withAppBuildGradle(gradleConfig, (mod) => {
       if (
-          !mod.modResults.contents.includes("pickFirst '**/libc++_shared.so'")
+        !mod.modResults.contents.includes("pickFirst '**/libc++_shared.so'")
       ) {
         mod.modResults.contents = mod.modResults.contents.replace(
-            'android {',
-            `
+          "android {",
+          `
           android {
             packagingOptions {
                pickFirst '**/libc++_shared.so' 
@@ -342,13 +366,13 @@ const withWatermelonDBAndroidJSI = (config: ExpoConfig, options: Options) => {
         );
       }
       if (
-          !mod.modResults.contents.includes(
-              "implementation project(':watermelondb-jsi')"
-          )
+        !mod.modResults.contents.includes(
+          "implementation project(':watermelondb-jsi')"
+        )
       ) {
         mod.modResults.contents = mod.modResults.contents.replace(
-            'dependencies {',
-            `
+          "dependencies {",
+          `
           dependencies {
             implementation project(':watermelondb-jsi')
           `
@@ -361,13 +385,13 @@ const withWatermelonDBAndroidJSI = (config: ExpoConfig, options: Options) => {
   function mainApplication(mainAppConfig: ExpoConfig): ExpoConfig {
     return withMainApplication(mainAppConfig, (mod) => {
       if (
-          !mod.modResults.contents.includes(
-              'import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage;'
-          )
+        !mod.modResults.contents.includes(
+          "import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage;"
+        )
       ) {
         mod.modResults.contents = mod.modResults.contents.replace(
-            'import com.nozbe.watermelondb.WatermelonDBPackage;',
-            `
+          "import com.nozbe.watermelondb.WatermelonDBPackage;",
+          `
           import com.nozbe.watermelondb.WatermelonDBPackage;
           import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage;
           import com.facebook.react.bridge.JSIModulePackage;
@@ -375,11 +399,11 @@ const withWatermelonDBAndroidJSI = (config: ExpoConfig, options: Options) => {
         );
       }
       if (
-          !mod.modResults.contents.includes('return new WatermelonDBJSIPackage()')
+        !mod.modResults.contents.includes("return new WatermelonDBJSIPackage()")
       ) {
         mod.modResults.contents = mod.modResults.contents.replace(
-            'new ReactNativeHostWrapper(this, new DefaultReactNativeHost(this) {',
-            `
+          "new ReactNativeHostWrapper(this, new DefaultReactNativeHost(this) {",
+          `
           new ReactNativeHostWrapper(this, new DefaultReactNativeHost(this) {
             @Override
              protected JSIModulePackage getJSIModulePackage() {
@@ -395,42 +419,46 @@ const withWatermelonDBAndroidJSI = (config: ExpoConfig, options: Options) => {
   return mainApplication(settingGradle(buildGradle(config)));
 };
 
-
 // @ts-ignore
 export function withSDK50(options: Options) {
   return (config: ExpoConfig): ExpoConfig => {
     let currentConfig: ExpoConfig = config;
-    // Android
-    if (options?.disableJsi !== true) {
+
+    // Ensure sdkVersion exists before parsing
+    const sdkVersion = parseFloat(config.sdkVersion ?? "0");
+
+    // Android JSI setup for SDK 50 only; bypass for SDK 51+
+    if (sdkVersion === 50.0 && options?.disableJsi !== true) {
       currentConfig = settingGradle(config);
       currentConfig = buildGradle(currentConfig);
       currentConfig = proGuardRules(currentConfig);
       currentConfig = mainApplication(currentConfig);
     }
 
-    // iOS
+    // iOS setup
     currentConfig = withCocoaPods(currentConfig);
     if (options?.excludeSimArch === true) {
       currentConfig = withExcludedSimulatorArchitectures(currentConfig);
     }
 
     return currentConfig as ExpoConfig;
-  }
+  };
 }
 
 // @ts-ignore
-export default (config, options) => {
-  if (config.sdkVersion >= '50.0.0') {
-    return withSDK50(options)(config);
-  };
+export default (config: ExpoConfig, options: Options) => {
+  const sdkVersion = parseFloat(config.sdkVersion ?? "0");
 
-  if (config.sdkVersion < '50.0.0') {
-    config = setAndroidMainApplication(config);
-    config = addFlipperDb(config, options?.databases ?? []);
-    config = withWatermelonDBAndroidJSI(setWmelonBridgingHeader(config), options);
-    config = withCocoaPods(config);
-    config = withExcludedSimulatorArchitectures(config);
+  if (sdkVersion >= 50.0) {
+    return withSDK50(options)(config);
   }
+
+  // Handle configuration for SDK versions below 50
+  config = setAndroidMainApplication(config);
+  config = addFlipperDb(config, options?.databases ?? []);
+  config = withWatermelonDBAndroidJSI(setWmelonBridgingHeader(config), options);
+  config = withCocoaPods(config);
+  config = withExcludedSimulatorArchitectures(config);
 
   return config;
 };

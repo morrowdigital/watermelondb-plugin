@@ -18,7 +18,7 @@ function setAndroidMainApplication(config) {
         "android",
         async (config) => {
             // @ts-ignore
-            const extension = config.sdkVersion >= '50.0.0' ? 'kt' : 'java';
+            const extension = config.sdkVersion >= "50.0.0" ? "kt" : "java";
             const root = config.modRequest.platformProjectRoot;
             const filePath = `${root}/app/src/main/java/${config?.android?.package?.replace(/\./g, "/")}/MainApplication.${extension}`;
             const contents = await fs.readFile(filePath, "utf-8");
@@ -30,7 +30,7 @@ function setAndroidMainApplication(config) {
 }
 function settingGradle(gradleConfig) {
     return (0, config_plugins_1.withSettingsGradle)(gradleConfig, (mod) => {
-        if (!mod.modResults.contents.includes(':watermelondb-jsi')) {
+        if (!mod.modResults.contents.includes(":watermelondb-jsi")) {
             mod.modResults.contents += `
           include ':watermelondb-jsi'
           project(':watermelondb-jsi').projectDir = new File([
@@ -45,7 +45,7 @@ function settingGradle(gradleConfig) {
 function buildGradle(config) {
     return (0, config_plugins_1.withAppBuildGradle)(config, (mod) => {
         if (!mod.modResults.contents.includes("implementation project(':watermelondb-jsi')")) {
-            const newContents = mod.modResults.contents.replace('dependencies {', `dependencies {
+            const newContents = mod.modResults.contents.replace("dependencies {", `dependencies {
           implementation project(':watermelondb-jsi')
           `);
             mod.modResults.contents = newContents;
@@ -59,7 +59,7 @@ const cocoaPods = (config) => {
         async (config) => {
             const filePath = path_1.default.join(config.modRequest.platformProjectRoot, "Podfile");
             const contents = await fs.readFile(filePath, "utf-8");
-            const newContents = contents.replace('post_install do |installer|', `
+            const newContents = contents.replace("post_install do |installer|", `
           
     # WatermelonDB dependency
     pod 'simdjson', path: '../node_modules/@nozbe/simdjson', modular_headers: true          
@@ -72,27 +72,24 @@ const cocoaPods = (config) => {
 };
 function mainApplication(config) {
     return (0, config_plugins_1.withMainApplication)(config, (mod) => {
-        if (!mod.modResults.contents.includes("import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage")) {
-            mod.modResults['contents'] = mod.modResults.contents.replace('import android.app.Application', `
-import android.app.Application
-import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage;
-import com.facebook.react.bridge.JSIModulePackage;        
-`);
+        // Remove deprecated WatermelonDB JSI package import for SDK 51+ compatibility
+        if (mod.modResults.contents.includes("import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage")) {
+            mod.modResults.contents = mod.modResults.contents.replace("import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage;", "");
         }
-        if (!mod.modResults.contents.includes("override fun getJSIModulePackage(): JSIModulePackage")) {
-            const newContents2 = mod.modResults.contents.replace('override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED', `
-        override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED
-        override fun getJSIModulePackage(): JSIModulePackage {
-        return WatermelonDBJSIPackage()
-        }`);
-            mod.modResults.contents = newContents2;
+        // Remove getJSIModulePackage method if it exists, for SDK 51+ compatibility
+        mod.modResults.contents = mod.modResults.contents.replace(/override fun getJSIModulePackage\(\): JSIModulePackage\s*\{[^}]*\}/s, "");
+        // Ensure `import com.facebook.react.bridge.JSIModulePackage` is also removed if no longer needed
+        if (mod.modResults.contents.includes("import com.facebook.react.bridge.JSIModulePackage")) {
+            mod.modResults.contents = mod.modResults.contents.replace("import com.facebook.react.bridge.JSIModulePackage;", "");
         }
         return mod;
     });
 }
 function proGuardRules(config) {
-    return (0, config_plugins_1.withDangerousMod)(config, ['android', async (config) => {
-            const contents = await fs.readFile(`${config.modRequest.platformProjectRoot}/app/proguard-rules.pro`, 'utf-8');
+    return (0, config_plugins_1.withDangerousMod)(config, [
+        "android",
+        async (config) => {
+            const contents = await fs.readFile(`${config.modRequest.platformProjectRoot}/app/proguard-rules.pro`, "utf-8");
             if (!contents.includes("-keep class com.nozbe.watermelondb.** { *; }")) {
                 const newContents = `
       ${contents}
@@ -101,7 +98,8 @@ function proGuardRules(config) {
                 await fs.writeFile(`${config.modRequest.platformProjectRoot}/app/proguard-rules.pro`, newContents);
             }
             return config;
-        }]);
+        },
+    ]);
 }
 /**
  * Version 50+ finish
@@ -225,11 +223,10 @@ const withWatermelonDBAndroidJSI = (config, options) => {
     if (options?.disableJsi === true) {
         return config;
     }
-    ;
     function buildGradle(gradleConfig) {
         return (0, config_plugins_1.withAppBuildGradle)(gradleConfig, (mod) => {
             if (!mod.modResults.contents.includes("pickFirst '**/libc++_shared.so'")) {
-                mod.modResults.contents = mod.modResults.contents.replace('android {', `
+                mod.modResults.contents = mod.modResults.contents.replace("android {", `
           android {
             packagingOptions {
                pickFirst '**/libc++_shared.so' 
@@ -237,7 +234,7 @@ const withWatermelonDBAndroidJSI = (config, options) => {
           `);
             }
             if (!mod.modResults.contents.includes("implementation project(':watermelondb-jsi')")) {
-                mod.modResults.contents = mod.modResults.contents.replace('dependencies {', `
+                mod.modResults.contents = mod.modResults.contents.replace("dependencies {", `
           dependencies {
             implementation project(':watermelondb-jsi')
           `);
@@ -247,15 +244,15 @@ const withWatermelonDBAndroidJSI = (config, options) => {
     }
     function mainApplication(mainAppConfig) {
         return (0, config_plugins_1.withMainApplication)(mainAppConfig, (mod) => {
-            if (!mod.modResults.contents.includes('import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage;')) {
-                mod.modResults.contents = mod.modResults.contents.replace('import com.nozbe.watermelondb.WatermelonDBPackage;', `
+            if (!mod.modResults.contents.includes("import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage;")) {
+                mod.modResults.contents = mod.modResults.contents.replace("import com.nozbe.watermelondb.WatermelonDBPackage;", `
           import com.nozbe.watermelondb.WatermelonDBPackage;
           import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage;
           import com.facebook.react.bridge.JSIModulePackage;
         `);
             }
-            if (!mod.modResults.contents.includes('return new WatermelonDBJSIPackage()')) {
-                mod.modResults.contents = mod.modResults.contents.replace('new ReactNativeHostWrapper(this, new DefaultReactNativeHost(this) {', `
+            if (!mod.modResults.contents.includes("return new WatermelonDBJSIPackage()")) {
+                mod.modResults.contents = mod.modResults.contents.replace("new ReactNativeHostWrapper(this, new DefaultReactNativeHost(this) {", `
           new ReactNativeHostWrapper(this, new DefaultReactNativeHost(this) {
             @Override
              protected JSIModulePackage getJSIModulePackage() {
@@ -272,14 +269,16 @@ const withWatermelonDBAndroidJSI = (config, options) => {
 function withSDK50(options) {
     return (config) => {
         let currentConfig = config;
-        // Android
-        if (options?.disableJsi !== true) {
+        // Ensure sdkVersion exists before parsing
+        const sdkVersion = parseFloat(config.sdkVersion ?? "0");
+        // Android JSI setup for SDK 50 only; bypass for SDK 51+
+        if (sdkVersion === 50.0 && options?.disableJsi !== true) {
             currentConfig = settingGradle(config);
             currentConfig = buildGradle(currentConfig);
             currentConfig = proGuardRules(currentConfig);
             currentConfig = mainApplication(currentConfig);
         }
-        // iOS
+        // iOS setup
         currentConfig = withCocoaPods(currentConfig);
         if (options?.excludeSimArch === true) {
             currentConfig = withExcludedSimulatorArchitectures(currentConfig);
@@ -290,16 +289,15 @@ function withSDK50(options) {
 exports.withSDK50 = withSDK50;
 // @ts-ignore
 exports.default = (config, options) => {
-    if (config.sdkVersion >= '50.0.0') {
+    const sdkVersion = parseFloat(config.sdkVersion ?? "0");
+    if (sdkVersion >= 50.0) {
         return withSDK50(options)(config);
     }
-    ;
-    if (config.sdkVersion < '50.0.0') {
-        config = setAndroidMainApplication(config);
-        config = addFlipperDb(config, options?.databases ?? []);
-        config = withWatermelonDBAndroidJSI(setWmelonBridgingHeader(config), options);
-        config = withCocoaPods(config);
-        config = withExcludedSimulatorArchitectures(config);
-    }
+    // Handle configuration for SDK versions below 50
+    config = setAndroidMainApplication(config);
+    config = addFlipperDb(config, options?.databases ?? []);
+    config = withWatermelonDBAndroidJSI(setWmelonBridgingHeader(config), options);
+    config = withCocoaPods(config);
+    config = withExcludedSimulatorArchitectures(config);
     return config;
 };
