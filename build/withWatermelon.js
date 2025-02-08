@@ -100,7 +100,7 @@ import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage;
         }
         if (!mod.modResults.contents.includes("packages.add(WatermelonDBJSIPackage())")) {
             const newContents2 = mod.modResults.contents.replace('return packages', `
-        packages.add(WatermelonDBJSIPackage())
+            packages.add(WatermelonDBJSIPackage())
         return packages`);
             mod.modResults.contents = newContents2;
         }

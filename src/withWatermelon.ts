@@ -145,7 +145,7 @@ import com.nozbe.watermelondb.jsi.WatermelonDBJSIPackage;
       const newContents2 = mod.modResults.contents.replace(
           'return packages',
           `
-        packages.add(WatermelonDBJSIPackage())
+            packages.add(WatermelonDBJSIPackage())
         return packages`
       )
       mod.modResults.contents = newContents2;
